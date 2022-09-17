@@ -28,7 +28,10 @@ void Compile()
     }
 
     var workspaceName = Path.GetFileName(workspaceDirectory);
-    var systemDirectory = Path.Combine(Path.GetDirectoryName(workspaceDirectory), Constants.File.SystemDirectory);
+    var utDirectory = Path.GetDirectoryName(workspaceDirectory);
+    ArgumentNullException.ThrowIfNull(utDirectory);
+
+    var systemDirectory = Path.Combine(utDirectory, Constants.File.SystemDirectory);
     var uccPath = Path.Combine(systemDirectory, Constants.File.Ucc);
 
     if (!File.Exists(uccPath))
@@ -71,6 +74,8 @@ void Compile()
     while (!compileProcess.StandardOutput.EndOfStream)
     {
         var line = compileProcess.StandardOutput.ReadLine();
+        ArgumentNullException.ThrowIfNull(line);
+
         FormatAndLog(line);
     }
 
@@ -83,7 +88,7 @@ void FormatAndLog(string line)
     {
         var split = line.Split(" : ");
         var className = split[0].Trim();
-        var message = split[1].Trim();
+        var message = string.Join(string.Empty, values: split.Skip(1)).Trim();
 
         if (line.Contains(Constants.Compiler.WarningMessage))
             Log.Warning("{ClassName} : " + message, className);
