@@ -4,8 +4,9 @@ using Nuke.Common.Tooling;
 using Nuke.Components;
 using Serilog;
 using Serilog.Sinks.SystemConsole.Themes;
-using UnrealUniverse.UccMake;
 using static Nuke.Common.IO.FileSystemTasks;
+
+namespace UnrealUniverse.UccMake;
 
 class Build : NukeBuild, IGlobalTool
 {
