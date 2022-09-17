@@ -28,10 +28,8 @@ class Build : NukeBuild, IGlobalTool
         .DependsOn(Backup)
         .Executes(() =>
         {
-            var systemDirectory = SourceDirectory / Constants.File.SystemDirectory;
-
+            var systemDirectory = SourceDirectory.Parent / Constants.File.SystemDirectory;
             var ucc = Ucc ?? ToolResolver.GetLocalTool(systemDirectory / "ucc.exe");
-
             var configurationPath = SourceDirectory / Constants.File.MakeIni;
 
             ucc($"make -ini={configurationPath}");
@@ -41,7 +39,6 @@ class Build : NukeBuild, IGlobalTool
         .Executes(() =>
         {
             var systemDirectory = SourceDirectory / Constants.File.SystemDirectory;
-
             var compiledFilePath = systemDirectory / $"{SourceDirectory.Name}.u";
             var backupCompiledFilePath = systemDirectory / $"{SourceDirectory.Name}.u.bak";
 
@@ -56,5 +53,13 @@ class Build : NukeBuild, IGlobalTool
 
                 DeleteFile(compiledFilePath);
             }
+        });
+
+    Target PostBuild => _ => _
+        .TriggeredBy(Compile)
+        .Executes(() =>
+        {
+            var postBuildBatch = ToolResolver.GetLocalTool(SourceDirectory / "PostBuild.bat");
+            postBuildBatch();
         });
 }
