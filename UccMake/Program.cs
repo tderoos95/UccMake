@@ -19,19 +19,17 @@ catch (Exception ex)
 
 void Compile()
 {
-    string workspaceDirectory = Environment.CurrentDirectory;
+    var workspaceDirectory = Environment.CurrentDirectory;
 
-    // If running from IDE set workSpaceDirectory to "C:\Desktop\"
+    // If running from IDE set workSpaceDirectory to a specific UT2004 project directory
     if (Debugger.IsAttached)
     {
         workspaceDirectory = @"D:\UT2004\Wormhole";
     }
 
     var workspaceName = Path.GetFileName(workspaceDirectory);
-
-    var uccPath = Path.GetDirectoryName(workspaceDirectory);
-    var systemDirectory = Path.Combine(uccPath, Constants.File.SystemDirectory);
-    uccPath = Path.Combine(systemDirectory, Constants.File.Ucc);
+    var systemDirectory = Path.Combine(Path.GetDirectoryName(workspaceDirectory), Constants.File.SystemDirectory);
+    var uccPath = Path.Combine(systemDirectory, Constants.File.Ucc);
 
     if (!File.Exists(uccPath))
     {
@@ -39,7 +37,7 @@ void Compile()
         return;
     }
 
-    string configurationPath = Path.Combine(workspaceDirectory, Constants.File.MakeIni);
+    var configurationPath = Path.Combine(workspaceDirectory, Constants.File.MakeIni);
 
     if (!File.Exists(configurationPath))
     {
