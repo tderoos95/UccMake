@@ -1,119 +1,59 @@
-﻿using Serilog;
+﻿using Nuke.Common;
+using Nuke.Common.IO;
+using Nuke.Common.Tooling;
+using Nuke.Components;
+using Serilog;
 using Serilog.Sinks.SystemConsole.Themes;
-using System.Diagnostics;
 using UnrealUniverse.UccMake;
+using static Nuke.Common.IO.FileSystemTasks;
 
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Debug()
-    .WriteTo.Console(theme: AnsiConsoleTheme.Sixteen)
-    .CreateLogger();
-
-try
+class Build : NukeBuild, IGlobalTool
 {
-    Compile();
-}
-catch (Exception ex)
-{
-    Log.Fatal(ex, "An error occurred in {UccMake} while compiling:", "UccMake.exe");
-}
+    public static int Main() => Execute<Build>(x => x.Compile);
 
-void Compile()
-{
-    var workspaceDirectory = Environment.CurrentDirectory;
+    [Parameter] readonly AbsolutePath SourceDirectory = EnvironmentInfo.WorkingDirectory;
 
-    // If running from IDE set workSpaceDirectory to a specific UT2004 project directory
-    if (Debugger.IsAttached)
+    [PathExecutable("ucc")] readonly Tool Ucc;
+
+    public Build()
     {
-        workspaceDirectory = @"D:\UT2004\Wormhole";
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.Console(theme: AnsiConsoleTheme.Sixteen)
+            .CreateLogger();
     }
 
-    var workspaceName = Path.GetFileName(workspaceDirectory);
-    var systemDirectory = Path.Combine(Path.GetDirectoryName(workspaceDirectory), Constants.File.SystemDirectory);
-    var uccPath = Path.Combine(systemDirectory, Constants.File.Ucc);
+    Target Compile => _ => _
+        .DependsOn(Backup)
+        .Executes(() =>
+        {
+            var systemDirectory = SourceDirectory / Constants.File.SystemDirectory;
 
-    if (!File.Exists(uccPath))
-    {
-        Log.Error("{UccPath} not found", uccPath);
-        return;
-    }
+            var ucc = Ucc ?? ToolResolver.GetLocalTool(systemDirectory / "ucc.exe");
 
-    var configurationPath = Path.Combine(workspaceDirectory, Constants.File.MakeIni);
+            var configurationPath = SourceDirectory / Constants.File.MakeIni;
 
-    if (!File.Exists(configurationPath))
-    {
-        Log.Error("{ConfigurationPath} not found", configurationPath);
-        return;
-    }
+            ucc($"make -ini={configurationPath}");
+        });
 
-    var compiledFilePath = Path.Combine(systemDirectory, $"{workspaceName}.u");
-    var backupCompiledFilePath = Path.Combine(systemDirectory, $"{workspaceName}.u.bak");
+    Target Backup => _ => _
+        .Executes(() =>
+        {
+            var systemDirectory = SourceDirectory / Constants.File.SystemDirectory;
 
-    // Create a backup of the old compiled file, then delete the old compiled file
-    if (File.Exists(compiledFilePath))
-    {
-        if (File.Exists(backupCompiledFilePath))
-            File.Delete(backupCompiledFilePath);
+            var compiledFilePath = systemDirectory / $"{SourceDirectory.Name}.u";
+            var backupCompiledFilePath = systemDirectory / $"{SourceDirectory.Name}.u.bak";
 
-        File.Copy(compiledFilePath, backupCompiledFilePath, true);
-        Log.Information("Created backup of {CompiledFilePath}", compiledFilePath);
-        Log.Information("Backup saved as {BackupCompiledFilePath}", backupCompiledFilePath);
+            if (compiledFilePath.FileExists())
+            {
+                if (backupCompiledFilePath.FileExists())
+                    DeleteFile(backupCompiledFilePath);
 
-        File.Delete(compiledFilePath);
-    }
+                CopyFile(compiledFilePath, backupCompiledFilePath);
+                Log.Information("Created backup of {CompiledFilePath}", compiledFilePath);
+                Log.Information("Backup saved as {BackupCompiledFilePath}", backupCompiledFilePath);
 
-    var compileProcess = new Process();
-    compileProcess.StartInfo.UseShellExecute = false;
-    compileProcess.StartInfo.RedirectStandardOutput = true;
-    compileProcess.StartInfo.FileName = uccPath;
-    compileProcess.StartInfo.Arguments = $"make -ini={configurationPath}";
-    compileProcess.Start();
-
-    while (!compileProcess.StandardOutput.EndOfStream)
-    {
-        var line = compileProcess.StandardOutput.ReadLine();
-        FormatAndLog(line);
-    }
-
-    compileProcess.WaitForExit();
-}
-
-void FormatAndLog(string line)
-{
-    if (line.Contains(Constants.Compiler.WarningMessage) || line.Contains(Constants.Compiler.ErrorMessage))
-    {
-        var split = line.Split(" : ");
-        var className = split[0].Trim();
-        var message = split[1].Trim();
-
-        if (line.Contains(Constants.Compiler.WarningMessage))
-            Log.Warning("{ClassName} : " + message, className);
-        else if (line.Contains(Constants.Compiler.ErrorMessage))
-            Log.Error("{ClassName} : " + message, className);
-
-        return;
-    }
-
-    if (line == Constants.Compiler.CompileAbortedMessage)
-    {
-        Log.Error(line);
-        return;
-    }
-
-    if (line.StartsWith(Constants.Compiler.CompileFailureMessagePrefix) ||
-        line.StartsWith(Constants.Compiler.CompileSuccessMessagePrefix))
-    {
-        // Extract number of errors and warnings in string "Failure - 1 error(s), 1 warning(s)"
-        var split = line.Split(" - ")[1].Split(", ");
-        var errors = split[0].Split(" ")[0];
-        var warnings = split[1].Split(" ")[0];
-
-        if (line.StartsWith(Constants.Compiler.CompileFailureMessagePrefix))
-            Log.Error("{Errors} error(s), {Warnings} warning(s)", errors, warnings);
-        else if (line.StartsWith(Constants.Compiler.CompileSuccessMessagePrefix))
-            Log.Information("{Errors} error(s), {Warnings} warning(s)", errors, warnings);
-   
-        return;
-    }
-
-    Log.Information(line);
+                DeleteFile(compiledFilePath);
+            }
+        });
 }
