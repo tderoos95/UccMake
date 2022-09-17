@@ -88,7 +88,7 @@ void FormatAndLog(string line)
     {
         var split = line.Split(" : ");
         var className = split[0].Trim();
-        var message = string.Join(string.Empty, values: split.Skip(1)).Trim();
+        var message = string.Join(" : ", values: split.Skip(1)).Trim();
 
         if (line.Contains(Constants.Compiler.WarningMessage))
             Log.Warning("{ClassName} : " + message, className);
