@@ -8,6 +8,8 @@
     <NukeRootDirectory>..</NukeRootDirectory>
     <NukeScriptDirectory>..</NukeScriptDirectory>
     <NukeTelemetryVersion>1</NukeTelemetryVersion>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ucc-make</ToolCommandName>
   </PropertyGroup>
 
   <ItemGroup>
