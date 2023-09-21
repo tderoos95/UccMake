@@ -24,7 +24,7 @@ void Compile()
     // If running from IDE set workSpaceDirectory to a specific UT2004 project directory
     if (Debugger.IsAttached)
     {
-        workspaceDirectory = @"D:\UT2004\Wormhole";
+        workspaceDirectory = @"D:\UT2004\RandomArena";
     }
 
     var workspaceName = Path.GetFileName(workspaceDirectory);
@@ -80,10 +80,14 @@ void Compile()
     }
 
     compileProcess.WaitForExit();
+
+    if (compileProcess.ExitCode == 0)
+        PostBuild();
 }
 
 void FormatAndLog(string line)
 {
+    #region Compiler formatting
     if (line.Contains(Constants.Compiler.WarningMessage) || line.Contains(Constants.Compiler.ErrorMessage))
     {
         var split = line.Split(" : ");
@@ -120,5 +124,55 @@ void FormatAndLog(string line)
         return;
     }
 
+    #endregion
+
+    #region PostBuild formatting
+    if (line.StartsWith(Constants.PostBuild.CopyingPrefix))
+    {
+        var fileName = line.Split(" ")[1];
+        var formattedLine = line.Replace(fileName, "{FileName}");
+        Log.Information(formattedLine, fileName);
+        return;
+    }
+
+    if(line.EndsWith(Constants.PostBuild.CopiedSuffix))
+    {
+        var amountOfFiles = line.Trim().Split(" ")[0];
+        var formattedLine = line.Replace(amountOfFiles, "{AmountOfFiles}");
+        Log.Information(formattedLine, amountOfFiles);
+        return;
+    }
+
+    #endregion
+
     Log.Information(line);
+}
+
+void PostBuild()
+{
+    var workspaceDirectory = Environment.CurrentDirectory;
+
+    // if workspaceDirectory/PostBuild.bat exists, run it and redirect output to console
+    var postBuildPath = Path.Combine(workspaceDirectory, Constants.File.PostBuild);
+
+    Log.Information("Executing {PostBuildPath}..", postBuildPath);
+
+    if (File.Exists(postBuildPath))
+    {
+        var postBuildProcess = new Process();
+        postBuildProcess.StartInfo.UseShellExecute = false;
+        postBuildProcess.StartInfo.RedirectStandardOutput = true;
+        postBuildProcess.StartInfo.FileName = postBuildPath;
+        postBuildProcess.Start();
+
+        while (!postBuildProcess.StandardOutput.EndOfStream)
+        {
+            var line = postBuildProcess.StandardOutput.ReadLine();
+            ArgumentNullException.ThrowIfNull(line);
+            FormatAndLog(line);
+        }
+
+        postBuildProcess.WaitForExit();
+    }
+
 }
