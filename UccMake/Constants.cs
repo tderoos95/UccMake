@@ -7,6 +7,8 @@ public static class Constants
         public const string Ucc = "ucc.exe";
         public const string SystemDirectory = "System";
         public const string MakeIni = "make.ini";
+        public const string PreBuild = "PreBuild.bat";
+        public const string PostBuild = "PostBuild.bat";
     }
 
     public static class Compiler
@@ -16,5 +18,11 @@ public static class Constants
         public const string CompileAbortedMessage = "Compile aborted due to errors.";
         public const string ErrorMessage = ": Error,";
         public const string WarningMessage = ": Warning,";
+    }
+
+    public static class PostBuild
+    {
+        public const string CopyingPrefix = "Copying ";
+        public const string CopiedSuffix = " copied.";
     }
 }
