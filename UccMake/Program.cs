@@ -4,12 +4,106 @@ using System.Diagnostics;
 using UnrealUniverse.UccMake;
 
 Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Debug()
+    .MinimumLevel.Debug()    
     .WriteTo.Console(theme: AnsiConsoleTheme.Sixteen)
     .CreateLogger();
 
+var workspaceDirectory = Environment.CurrentDirectory;
+
+#region Flatten commandlet
+
+if (args.Length > 0 && args[0] == "--flattensource")
+{
+    FlattenCommandlet();
+    return;
+}
+
+
+void FlattenCommandlet()
+{
+    var sourceCodeFolder = args[1];
+    var sourceCodePath = Path.Combine(workspaceDirectory, sourceCodeFolder);
+    var sourceCodeDirectory = new DirectoryInfo(sourceCodePath);
+
+    if(!sourceCodeDirectory.Exists)
+    {
+        Log.Error("Source code directory {Path} does not exist.", sourceCodePath);
+        Log.Error("Flattening aborted.");
+        return;
+    }
+
+    var compilerInputPath = Path.Combine(workspaceDirectory, "classes");
+    var compilerInputDirectory = new DirectoryInfo(compilerInputPath);
+
+    Log.Information("Source code directory: {Path}", sourceCodePath);
+    Log.Information("Files from subdirectories will be copied to: {Path}", compilerInputPath);
+
+    if(!compilerInputDirectory.Exists)
+    {
+        Directory.CreateDirectory(compilerInputPath);
+    }
+    else if(compilerInputDirectory.GetFiles().Any())
+    {
+        Log.Error("Classes directory is not empty, make sure to empty it before flattening the source code.");
+        Log.Error("Flattening aborted.");
+        return;
+    }
+
+    // Flatten the source code
+    var totalAmountOfFiles = 0;
+    var flattenedFileCount = 0;
+    FlattenDirectory(sourceCodeDirectory, compilerInputPath, ref totalAmountOfFiles, ref flattenedFileCount);
+
+    // Show results
+    if (flattenedFileCount != totalAmountOfFiles)
+    {
+        Log.Warning("Flattened {FlattenedFileCount} out of {TotalFiles} files", flattenedFileCount, totalAmountOfFiles);
+        Log.Warning("Flattening finished with warning(s):");
+    }
+    else
+    {
+        Log.Information("Flattened {FlattenedFileCount} out of {TotalFiles} files.", flattenedFileCount, totalAmountOfFiles);
+        Log.Information("Flattening finished successfully.");
+    }
+}
+
+void FlattenDirectory(DirectoryInfo directory, string compilerInputPath, ref int totalAmount, ref int flattenedFileCount)
+{
+    var files = directory.GetFiles();
+    totalAmount += files.Length;
+
+    foreach (var file in files)
+    {
+        var destinationPath = Path.Combine(compilerInputPath, file.Name);
+        if (TryMoveFile(file, destinationPath))
+            flattenedFileCount++;
+    }
+
+    foreach (var subDirectory in directory.GetDirectories())
+        FlattenDirectory(subDirectory, compilerInputPath, ref totalAmount, ref flattenedFileCount);
+}
+
+bool TryMoveFile(FileInfo file, string destinationPath)
+{
+    try
+    {
+        file.CopyTo(destinationPath);
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Log.Fatal(ex, "An error occurred while copying {File} to {DestinationPath}", file.Name, destinationPath);
+        return false;
+    }
+}
+
+#endregion
+
+#region Default flow
+
 try
 {
+    PreBuild();
     Compile();
 }
 catch (Exception ex)
@@ -17,10 +111,33 @@ catch (Exception ex)
     Log.Fatal(ex, "An error occurred in {UccMake} while compiling:", "UccMake.exe");
 }
 
-void Compile()
+#endregion
+
+#region PreBuild logic
+
+void PreBuild()
 {
     var workspaceDirectory = Environment.CurrentDirectory;
+    var preBuildPath = Path.Combine(workspaceDirectory, Constants.File.PreBuild);
 
+    Log.Information("Executing {PreBuildPath}..", preBuildPath);
+
+    // run prebuild.bat and redirect output to console
+    if (File.Exists(preBuildPath))
+    {
+        var preBuildProcess = new Process();
+        preBuildProcess.StartInfo.FileName = preBuildPath;
+        preBuildProcess.Start();
+        preBuildProcess.WaitForExit();
+    }
+}
+
+#endregion
+
+#region Compile logic
+
+void Compile()
+{
     // If running from IDE set workSpaceDirectory to a specific UT2004 project directory
     if (Debugger.IsAttached)
     {
@@ -148,17 +265,18 @@ void FormatAndLog(string line)
     Log.Information(line);
 }
 
+#endregion
+
+#region PostBuild logic
+
 void PostBuild()
 {
-    var workspaceDirectory = Environment.CurrentDirectory;
-
-    // if workspaceDirectory/PostBuild.bat exists, run it and redirect output to console
     var postBuildPath = Path.Combine(workspaceDirectory, Constants.File.PostBuild);
-
-    Log.Information("Executing {PostBuildPath}..", postBuildPath);
 
     if (File.Exists(postBuildPath))
     {
+        Log.Information("Executing {PostBuildPath}..", postBuildPath);
+
         var postBuildProcess = new Process();
         postBuildProcess.StartInfo.UseShellExecute = false;
         postBuildProcess.StartInfo.RedirectStandardOutput = true;
@@ -174,5 +292,6 @@ void PostBuild()
 
         postBuildProcess.WaitForExit();
     }
-
 }
+
+#endregion
