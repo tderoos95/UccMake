@@ -1,6 +1,7 @@
 ﻿using Serilog;
 using Serilog.Sinks.SystemConsole.Themes;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using UnrealUniverse.UccMake;
 
 Log.Logger = new LoggerConfiguration()
@@ -9,6 +10,8 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 var workspaceDirectory = Environment.CurrentDirectory;
+var preBuildPath = Path.Combine(workspaceDirectory, Constants.File.PreBuild);
+DirectoryInfo? customSourceDirectory = null;
 
 #region Flatten commandlet
 
@@ -136,13 +139,35 @@ void PreBuild()
 
 #region Compile logic
 
+void GetPreBuildInfo()
+{
+    if (!File.Exists(preBuildPath))
+        return;
+
+    var preBuildFile = File.ReadAllLines(preBuildPath);
+    var flattenSourceLine = preBuildFile.FirstOrDefault(line => line.Contains("--flattensource"));
+
+    if (flattenSourceLine == null)
+        return;
+
+    var sourceCodeFolder = flattenSourceLine.Split(" ")[2];
+    var sourceCodePath = Path.Combine(workspaceDirectory, sourceCodeFolder);
+    customSourceDirectory = new DirectoryInfo(sourceCodePath);
+
+    if(!customSourceDirectory.Exists)
+        Log.Warning("Custom source code directory {Path} does not exist.", sourceCodePath);
+}
+
 void Compile()
 {
     // If running from IDE set workSpaceDirectory to a specific UT2004 project directory
     if (Debugger.IsAttached)
     {
-        workspaceDirectory = @"D:\UT2004\RandomArena";
+        workspaceDirectory = @"D:\UT2004\MonsterMayhem";
+        preBuildPath = Path.Combine(workspaceDirectory, Constants.File.PreBuild);
     }
+
+    GetPreBuildInfo();
 
     var workspaceName = Path.GetFileName(workspaceDirectory);
     var utDirectory = Path.GetDirectoryName(workspaceDirectory);
@@ -202,6 +227,25 @@ void Compile()
         PostBuild();
 }
 
+string FindPrecompiledFile(string flattenedFileName)
+{
+    if (customSourceDirectory == null)
+        return flattenedFileName;
+
+    var suffixIndex = flattenedFileName.IndexOf('(');
+    var suffix = flattenedFileName.Substring(suffixIndex);
+    flattenedFileName = flattenedFileName.Substring(0, suffixIndex);
+    var fileName = Path.GetFileName(flattenedFileName);
+
+    var precompiledFile = customSourceDirectory
+        .GetFiles(fileName, SearchOption.AllDirectories)
+        .FirstOrDefault();
+    
+    var preCompiledFileName = precompiledFile?.FullName ?? flattenedFileName;
+    preCompiledFileName += suffix;
+    return preCompiledFileName;
+}
+
 void FormatAndLog(string line)
 {
     #region Compiler formatting
@@ -210,6 +254,9 @@ void FormatAndLog(string line)
         var split = line.Split(" : ");
         var className = split[0].Trim();
         var message = string.Join(" : ", values: split.Skip(1)).Trim();
+
+        // If there is a custom source code directory, try to find the precompiled file
+        className = FindPrecompiledFile(className);
 
         if (line.Contains(Constants.Compiler.WarningMessage))
             Log.Warning("{ClassName} : " + message, className);
